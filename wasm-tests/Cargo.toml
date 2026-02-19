@@ -1,0 +1,13 @@
+[package]
+name = "wasm-tests"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+diesel = { git = "https://github.com/LucaCappelletti94/diesel", branch = "sqlite-session-changeset", features = ["sqlite"] }
+diesel_load_extension = { path = ".." }
+sqlite-wasm-rs = { version = "0.5.2" }
+
+[dev-dependencies]
+wasm-bindgen-test = "0.3"

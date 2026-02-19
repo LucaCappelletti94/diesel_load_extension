@@ -1,0 +1,43 @@
+[workspace]
+members = [".", "wasm-tests"]
+
+[package]
+name = "diesel_load_extension"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.82"
+authors = ["Luca Cappelletti <cappelletti.luca94@gmail.com>"]
+description = "Diesel extension for SQLite load_extension support"
+license = "MIT"
+repository = "https://github.com/LucaCappelletti94/diesel_load_extension"
+readme = "README.md"
+keywords = ["diesel", "sqlite", "extension", "load-extension"]
+categories = ["database"]
+
+# Blocked until diesel-rs/diesel#4966 is merged
+publish = false
+
+[dependencies]
+diesel = { git = "https://github.com/LucaCappelletti94/diesel", branch = "sqlite-session-changeset", features = ["sqlite"] }
+thiserror = "2"
+
+[target.'cfg(not(all(target_family = "wasm", target_os = "unknown")))'.dependencies]
+libsqlite3-sys = { version = "0.31", features = ["bundled"] }
+
+[target.'cfg(all(target_family = "wasm", target_os = "unknown"))'.dependencies]
+sqlite-wasm-rs = { version = "0.5.2" }
+
+[lints.rust]
+unsafe_code = "deny"
+
+[lints.clippy]
+all = { level = "warn", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
+nursery = { level = "warn", priority = -1 }
+undocumented_unsafe_blocks = "deny"
+multiple_unsafe_ops_per_block = "warn"
+
+[profile.release]
+lto = true
+codegen-units = 1
+opt-level = 3
