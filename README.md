@@ -86,6 +86,40 @@ let err = conn.load_extension("nonexistent_extension", None).unwrap_err();
 assert!(matches!(err, LoadExtensionError::LoadFailed(_)));
 ```
 
+### WASM Extensions (Precompiled)
+
+On `wasm32-unknown-unknown`, dynamic library loading is unavailable. You can still use
+SQLite extensions that are **compiled into** your WASM build by registering them with
+`sqlite3_auto_extension`. This crate exposes a safe helper for that. This does **not**
+load external `.so/.dll/.dylib` files; it only registers precompiled extensions.
+
+```rust
+fn main() {
+    #[cfg(all(target_family = "wasm", target_os = "unknown"))]
+    {
+        use diesel::prelude::*;
+        use diesel::SqliteConnection;
+        use diesel_load_extension::wasm::register_auto_extension;
+
+        unsafe extern "C" fn geolite_init(
+            _db: *mut sqlite_wasm_rs::sqlite3,
+            _pz_err_msg: *mut *mut std::ffi::c_char,
+            _p_api: *const sqlite_wasm_rs::sqlite3_api_routines,
+        ) -> std::ffi::c_int {
+            // Call into your extension's initialization routine here.
+            0
+        }
+
+        register_auto_extension(geolite_init);
+
+        // This works with the default in-memory database on WASM.
+        // If you need OPFS or another VFS, configure it using sqlite-wasm-rs APIs.
+        let mut conn = SqliteConnection::establish(":memory:").unwrap();
+        let _ = &mut conn;
+    }
+}
+```
+
 ## API
 
 ### `SqliteLoadExtensionExt` trait
@@ -133,4 +167,4 @@ git config core.hooksPath .githooks
 
 ## License
 
-MIT — see [LICENSE](LICENSE) for details.
+MIT — see LICENSE for details.

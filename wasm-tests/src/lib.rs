@@ -3,18 +3,30 @@
 use diesel::prelude::*;
 use diesel::SqliteConnection;
 use diesel_load_extension::{LoadExtensionError, SqliteLoadExtensionExt};
-use std::sync::OnceLock;
 use wasm_bindgen_test::*;
 
 wasm_bindgen_test_configure!(run_in_browser);
 
 fn create_connection() -> SqliteConnection {
-    static VFS_INIT: OnceLock<()> = OnceLock::new();
-    VFS_INIT.get_or_init(|| {
-        sqlite_wasm_rs::export::install_opfs_sahpool(None, true)
-            .expect("Failed to install OPFS SAH pool VFS");
-    });
     SqliteConnection::establish(":memory:").expect("Failed to create in-memory connection")
+}
+
+#[wasm_bindgen_test]
+fn test_register_auto_extension_idempotent() {
+    use diesel_load_extension::wasm::register_auto_extension;
+
+    unsafe extern "C" fn dummy_init(
+        _db: *mut sqlite_wasm_rs::sqlite3,
+        _pz_err_msg: *mut *mut std::ffi::c_char,
+        _p_api: *const sqlite_wasm_rs::sqlite3_api_routines,
+    ) -> std::ffi::c_int {
+        0
+    }
+
+    register_auto_extension(dummy_init);
+    register_auto_extension(dummy_init);
+
+    let _ = create_connection();
 }
 
 #[wasm_bindgen_test]

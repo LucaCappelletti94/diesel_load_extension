@@ -30,6 +30,18 @@ pub trait SqliteLoadExtensionExt {
     /// Returns [`LoadExtensionError::EnableFailed`] if `SQLite` returns a non-OK status code.
     ///
     /// On WASM targets, returns [`LoadExtensionError::UnsupportedPlatform`] unconditionally.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use diesel::prelude::*;
+    /// use diesel::SqliteConnection;
+    /// use diesel_load_extension::SqliteLoadExtensionExt;
+    ///
+    /// let mut conn = SqliteConnection::establish(":memory:").unwrap();
+    /// conn.enable_load_extension(true).unwrap();
+    /// conn.enable_load_extension(false).unwrap();
+    /// ```
     fn enable_load_extension(&mut self, enabled: bool) -> Result<(), LoadExtensionError>;
 
     /// Load a `SQLite` extension from a shared library file.
@@ -61,6 +73,18 @@ pub trait SqliteLoadExtensionExt {
     /// No user-provided callbacks run between the enable and disable calls, so
     /// panics are unlikely. If a panic did occur (e.g., OOM in an allocation),
     /// a best-effort guard disables extension loading when the stack unwinds.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use diesel::prelude::*;
+    /// use diesel::SqliteConnection;
+    /// use diesel_load_extension::{LoadExtensionError, SqliteLoadExtensionExt};
+    ///
+    /// let mut conn = SqliteConnection::establish(":memory:").unwrap();
+    /// let result = conn.load_extension("nonexistent_extension", None);
+    /// assert!(matches!(result, Err(LoadExtensionError::LoadFailed(_))));
+    /// ```
     fn load_extension(
         &mut self,
         path: &str,
@@ -93,6 +117,21 @@ pub trait SqliteLoadExtensionExt {
     /// No user-provided callbacks run between the enable and disable calls, so
     /// panics are unlikely. If a panic did occur (e.g., OOM in an allocation),
     /// a best-effort guard disables extension loading when the stack unwinds.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use diesel::prelude::*;
+    /// use diesel::SqliteConnection;
+    /// use diesel_load_extension::{LoadExtensionError, SqliteLoadExtensionExt};
+    ///
+    /// let mut conn = SqliteConnection::establish(":memory:").unwrap();
+    /// let result = conn.load_extensions(&[
+    ///     ("nonexistent_ext1", None),
+    ///     ("nonexistent_ext2", Some("init")),
+    /// ]);
+    /// assert!(matches!(result, Err(LoadExtensionError::LoadFailed(_))));
+    /// ```
     fn load_extensions(
         &mut self,
         extensions: &[(&str, Option<&str>)],
@@ -299,6 +338,54 @@ mod wasm_impl {
 
             Err(LoadExtensionError::UnsupportedPlatform)
         }
+    }
+}
+
+/// WASM-specific helpers for precompiled SQLite extensions.
+#[cfg(all(target_family = "wasm", target_os = "unknown"))]
+pub mod wasm {
+    use sqlite_wasm_rs::{sqlite3, sqlite3_api_routines, sqlite3_auto_extension};
+    use std::ffi::c_char;
+    use std::sync::OnceLock;
+
+    /// SQLite auto-extension initializer signature.
+    pub type AutoExtensionInit = unsafe extern "C" fn(
+        *mut sqlite3,
+        *mut *mut c_char,
+        *const sqlite3_api_routines,
+    ) -> std::ffi::c_int;
+
+    /// Register a precompiled SQLite extension for WASM builds.
+    ///
+    /// This wraps `sqlite3_auto_extension` and hides the required unsafe cast.
+    /// The registration is idempotent and runs at most once per process.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// fn main() {
+    ///     #[cfg(all(target_family = "wasm", target_os = "unknown"))]
+    ///     {
+    ///         use diesel_load_extension::wasm::register_auto_extension;
+    ///
+    ///         unsafe extern "C" fn dummy_init(
+    ///             _db: *mut sqlite_wasm_rs::sqlite3,
+    ///             _pz_err_msg: *mut *mut std::ffi::c_char,
+    ///             _p_api: *const sqlite_wasm_rs::sqlite3_api_routines,
+    ///         ) -> std::ffi::c_int {
+    ///             0
+    ///         }
+    ///
+    ///         register_auto_extension(dummy_init);
+    ///     }
+    /// }
+    /// ```
+    #[allow(unsafe_code)]
+    pub fn register_auto_extension(init: AutoExtensionInit) {
+        static INIT: OnceLock<()> = OnceLock::new();
+        INIT.get_or_init(|| unsafe {
+            let _ = sqlite3_auto_extension(Some(init));
+        });
     }
 }
 

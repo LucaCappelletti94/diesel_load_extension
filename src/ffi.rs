@@ -4,6 +4,7 @@
 pub use libsqlite3_sys::{sqlite3, sqlite3_free, SQLITE_OK};
 
 #[cfg(all(target_family = "wasm", target_os = "unknown"))]
+#[allow(unused_imports)]
 pub use sqlite_wasm_rs::{sqlite3, sqlite3_free, SQLITE_OK};
 
 #[cfg(not(all(target_family = "wasm", target_os = "unknown")))]
@@ -30,4 +31,5 @@ extern "C" {
 // These always return SQLITE_ERROR since dynamic library loading is not
 // supported in WebAssembly.
 #[cfg(all(target_family = "wasm", target_os = "unknown"))]
+#[allow(unused_imports)]
 pub use sqlite_wasm_rs::{sqlite3_enable_load_extension, sqlite3_load_extension};
