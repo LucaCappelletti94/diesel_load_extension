@@ -14,8 +14,6 @@ readme = "README.md"
 keywords = ["diesel", "sqlite", "extension", "load-extension"]
 categories = ["database"]
 
-# Blocked until diesel-rs/diesel#4966 is merged
-publish = false
 
 [dependencies]
 diesel = { git = "https://github.com/LucaCappelletti94/diesel", branch = "sqlite-session-changeset", features = ["sqlite"] }

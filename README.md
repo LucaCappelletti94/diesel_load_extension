@@ -11,7 +11,7 @@ This crate provides a safe Rust wrapper around SQLite's [`sqlite3_load_extension
 
 Diesel does not currently expose access to the raw SQLite connection handle (`*mut sqlite3`). This crate depends on a proposed [`with_raw_connection`](https://github.com/diesel-rs/diesel/pull/4966) API that provides scoped access to the underlying C handle, enabling features like extension loading without requiring Diesel to wrap every optional SQLite C API.
 
-Until [diesel-rs/diesel#4966](https://github.com/diesel-rs/diesel/pull/4966) is merged, this crate depends on a fork of Diesel and **cannot be published to crates.io**. Once that PR lands, this crate will switch to a released Diesel version and be published normally.
+Until [diesel-rs/diesel#4966](https://github.com/diesel-rs/diesel/pull/4966) is merged, this crate depends on a fork of Diesel and is **not intended for crates.io publication yet**. Once that PR lands, this crate will switch to a released Diesel version and be published normally.
 
 ## Usage
 

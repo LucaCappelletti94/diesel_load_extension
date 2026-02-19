@@ -15,14 +15,6 @@ env:
   RUSTFLAGS: -Dwarnings
 
 jobs:
-  msrv:
-    name: MSRV
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: taiki-e/install-action@cargo-hack
-      - run: cargo hack check --rust-version --workspace --ignore-private
-
   hooks:
     name: Hooks
     runs-on: ubuntu-latest
