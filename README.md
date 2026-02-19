@@ -7,7 +7,7 @@ Diesel extension for `SQLite` [`load_extension`](https://www.sqlite.org/c3ref/lo
 
 This crate provides a safe Rust wrapper around `SQLite`'s [`sqlite3_load_extension`](https://www.sqlite.org/c3ref/load_extension.html) for [Diesel](https://diesel.rs)'s `SqliteConnection`. Extension loading is automatically enabled before the load and disabled afterward, so it is never left enabled unintentionally.
 
-## Why a separate crate?
+Note: not all `SQLite` builds include the load-extension ABI. Builds compiled with `SQLITE_OMIT_LOAD_EXTENSION` omit these symbols entirely, and linking will fail if they are missing.
 
 Diesel does not currently expose access to the raw `SQLite` connection handle (`*mut sqlite3`). This crate depends on a proposed [`with_raw_connection`](https://github.com/diesel-rs/diesel/pull/4966) API that provides scoped access to the underlying C handle, enabling features like extension loading without requiring Diesel to wrap every optional `SQLite` C API.
 
@@ -118,50 +118,9 @@ load external `.so/.dll/.dylib` files; it only registers precompiled extensions.
 }
 ```
 
-## API
-
-### `SqliteLoadExtensionExt` trait
-
-| Method                                | Description                                                                                                                              |
-| ------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| `load_extension(path, entry_point)`   | Load an extension from a shared library. Automatically enables and disables extension loading. Wraps [`sqlite3_load_extension`](https://www.sqlite.org/c3ref/load_extension.html). |
-| `load_extensions(extensions)`         | Load multiple extensions in a single enable/disable cycle.                                                                               |
-| `enable_load_extension(enabled: bool)`| Manually enable or disable extension loading. Wraps [`sqlite3_enable_load_extension`](https://www.sqlite.org/c3ref/enable_load_extension.html). |
-
-### `LoadExtensionError` enum
-
-| Variant                | Description                                                                                                  |
-| --------------------- | ------------------------------------------------------------------------------------------------------------ |
-| `EnableFailed(String)` | `sqlite3_enable_load_extension` returned a non-OK status, with the `SQLite` error message.                     |
-| `LoadFailed(String)`   | `sqlite3_load_extension` failed, with the `SQLite` error message.                                              |
-| `InvalidPath`          | The extension path contains an interior null byte.                                                           |
-| `InvalidEntryPoint`    | The entry point name contains an interior null byte.                                                         |
-| `UnsupportedPlatform`  | Extension loading is not available on this platform (WASM).                                                   |
-
-## Platform Support
-
-| Platform                         | Status                                   |
-| ------------------------------- | ---------------------------------------- |
-| Linux                            | Full support                             |
-| macOS                            | Full support                             |
-| Windows                          | Full support                             |
-| WASM (`wasm32-unknown-unknown`)  | Compiles, but extension loading is unavailable |
-
-On native targets, extension loading works via `dlopen`/`LoadLibrary`. On WASM targets, extension loading is not supported since dynamic library loading is unavailable in WebAssembly. All methods return `LoadExtensionError::UnsupportedPlatform` on WASM (except `load_extensions` with an empty list, which returns `Ok(())`). Input validation (null bytes) is still performed before the platform check, so callers get specific errors for invalid inputs regardless of platform.
-
 ### `SQLite` build requirements
 
 This crate calls [`sqlite3_load_extension`](https://www.sqlite.org/c3ref/load_extension.html) and [`sqlite3_enable_load_extension`](https://www.sqlite.org/c3ref/enable_load_extension.html), which are **not part of every `SQLite` build**. `SQLite` builds compiled with [`SQLITE_OMIT_LOAD_EXTENSION`](https://www.sqlite.org/compile.html#omit_load_extension) omit these functions entirely, and linking against such a build will fail. This crate depends on `libsqlite3-sys` with the `bundled` feature, which compiles `SQLite` from source with extension loading enabled, so this is not an issue with the default configuration. If you switch to a system-provided `SQLite` library, ensure it was built without `SQLITE_OMIT_LOAD_EXTENSION`.
-
-## Development
-
-### Pre-commit hook
-
-This repository includes a pre-commit hook that runs `cargo fmt --check` and `cargo clippy`. To enable it:
-
-```bash
-git config core.hooksPath .githooks
-```
 
 ## License
 
