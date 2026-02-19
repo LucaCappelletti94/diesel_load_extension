@@ -248,6 +248,7 @@ mod native_impl {
     }
 
     #[cfg(test)]
+    #[allow(clippy::redundant_pub_crate)]
     pub(super) fn test_with_extension_enabled_panics(conn: &mut SqliteConnection) {
         let _ = with_extension_enabled(conn, |_conn| -> Result<(), LoadExtensionError> {
             panic!("intentional panic for test");

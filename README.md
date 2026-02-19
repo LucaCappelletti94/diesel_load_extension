@@ -1,15 +1,15 @@
-# diesel_load_extension
+# `diesel_load_extension`
 
 [![CI](https://github.com/LucaCappelletti94/diesel_load_extension/actions/workflows/ci.yml/badge.svg)](https://github.com/LucaCappelletti94/diesel_load_extension/actions/workflows/ci.yml)
 [![codecov](https://codecov.io/gh/LucaCappelletti94/diesel_load_extension/graph/badge.svg)](https://codecov.io/gh/LucaCappelletti94/diesel_load_extension)
 
-Diesel extension for SQLite [`load_extension`](https://www.sqlite.org/c3ref/load_extension.html) support.
+Diesel extension for `SQLite` [`load_extension`](https://www.sqlite.org/c3ref/load_extension.html) support.
 
-This crate provides a safe Rust wrapper around SQLite's [`sqlite3_load_extension`](https://www.sqlite.org/c3ref/load_extension.html) for [Diesel](https://diesel.rs)'s `SqliteConnection`. Extension loading is automatically enabled before the load and disabled afterward, so it is never left enabled unintentionally.
+This crate provides a safe Rust wrapper around `SQLite`'s [`sqlite3_load_extension`](https://www.sqlite.org/c3ref/load_extension.html) for [Diesel](https://diesel.rs)'s `SqliteConnection`. Extension loading is automatically enabled before the load and disabled afterward, so it is never left enabled unintentionally.
 
 ## Why a separate crate?
 
-Diesel does not currently expose access to the raw SQLite connection handle (`*mut sqlite3`). This crate depends on a proposed [`with_raw_connection`](https://github.com/diesel-rs/diesel/pull/4966) API that provides scoped access to the underlying C handle, enabling features like extension loading without requiring Diesel to wrap every optional SQLite C API.
+Diesel does not currently expose access to the raw `SQLite` connection handle (`*mut sqlite3`). This crate depends on a proposed [`with_raw_connection`](https://github.com/diesel-rs/diesel/pull/4966) API that provides scoped access to the underlying C handle, enabling features like extension loading without requiring Diesel to wrap every optional `SQLite` C API.
 
 Until [diesel-rs/diesel#4966](https://github.com/diesel-rs/diesel/pull/4966) is merged, this crate depends on a fork of Diesel and is **not intended for crates.io publication yet**. Once that PR lands, this crate will switch to a released Diesel version and be published normally.
 
@@ -73,7 +73,7 @@ assert!(matches!(result, Err(LoadExtensionError::LoadFailed(_))));
 
 ### Error Handling
 
-The crate provides a [`LoadExtensionError`] type that surfaces SQLite error messages:
+The crate provides a [`LoadExtensionError`] type that surfaces `SQLite` error messages:
 
 ```rust
 use diesel::prelude::*;
@@ -89,7 +89,7 @@ assert!(matches!(err, LoadExtensionError::LoadFailed(_)));
 ### WASM Extensions (Precompiled)
 
 On `wasm32-unknown-unknown`, dynamic library loading is unavailable. You can still use
-SQLite extensions that are **compiled into** your WASM build by registering them with
+`SQLite` extensions that are **compiled into** your WASM build by registering them with
 `sqlite3_auto_extension`. This crate exposes a safe helper for that. This does **not**
 load external `.so/.dll/.dylib` files; it only registers precompiled extensions.
 
@@ -134,8 +134,8 @@ fn main() {
 
 | Variant                | Description                                                                                                  |
 | --------------------- | ------------------------------------------------------------------------------------------------------------ |
-| `EnableFailed(String)` | `sqlite3_enable_load_extension` returned a non-OK status, with the SQLite error message.                     |
-| `LoadFailed(String)`   | `sqlite3_load_extension` failed, with the SQLite error message.                                              |
+| `EnableFailed(String)` | `sqlite3_enable_load_extension` returned a non-OK status, with the `SQLite` error message.                     |
+| `LoadFailed(String)`   | `sqlite3_load_extension` failed, with the `SQLite` error message.                                              |
 | `InvalidPath`          | The extension path contains an interior null byte.                                                           |
 | `InvalidEntryPoint`    | The entry point name contains an interior null byte.                                                         |
 | `UnsupportedPlatform`  | Extension loading is not available on this platform (WASM).                                                   |
@@ -151,9 +151,9 @@ fn main() {
 
 On native targets, extension loading works via `dlopen`/`LoadLibrary`. On WASM targets, extension loading is not supported since dynamic library loading is unavailable in WebAssembly. All methods return `LoadExtensionError::UnsupportedPlatform` on WASM (except `load_extensions` with an empty list, which returns `Ok(())`). Input validation (null bytes) is still performed before the platform check, so callers get specific errors for invalid inputs regardless of platform.
 
-### SQLite build requirements
+### `SQLite` build requirements
 
-This crate calls [`sqlite3_load_extension`](https://www.sqlite.org/c3ref/load_extension.html) and [`sqlite3_enable_load_extension`](https://www.sqlite.org/c3ref/enable_load_extension.html), which are **not part of every SQLite build**. SQLite builds compiled with [`SQLITE_OMIT_LOAD_EXTENSION`](https://www.sqlite.org/compile.html#omit_load_extension) omit these functions entirely, and linking against such a build will fail. This crate depends on `libsqlite3-sys` with the `bundled` feature, which compiles SQLite from source with extension loading enabled, so this is not an issue with the default configuration. If you switch to a system-provided SQLite library, ensure it was built without `SQLITE_OMIT_LOAD_EXTENSION`.
+This crate calls [`sqlite3_load_extension`](https://www.sqlite.org/c3ref/load_extension.html) and [`sqlite3_enable_load_extension`](https://www.sqlite.org/c3ref/enable_load_extension.html), which are **not part of every `SQLite` build**. `SQLite` builds compiled with [`SQLITE_OMIT_LOAD_EXTENSION`](https://www.sqlite.org/compile.html#omit_load_extension) omit these functions entirely, and linking against such a build will fail. This crate depends on `libsqlite3-sys` with the `bundled` feature, which compiles `SQLite` from source with extension loading enabled, so this is not an issue with the default configuration. If you switch to a system-provided `SQLite` library, ensure it was built without `SQLITE_OMIT_LOAD_EXTENSION`.
 
 ## Development
 

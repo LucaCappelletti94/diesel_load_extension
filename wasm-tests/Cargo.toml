@@ -8,6 +8,4 @@ publish = false
 diesel = { git = "https://github.com/LucaCappelletti94/diesel", branch = "sqlite-session-changeset", features = ["sqlite"] }
 diesel_load_extension = { path = ".." }
 sqlite-wasm-rs = { version = "0.5.2" }
-
-[dev-dependencies]
 wasm-bindgen-test = "0.3"
