@@ -188,6 +188,25 @@ jobs:
         env:
           NDK_PATH: ${{ steps.setup-ndk.outputs.ndk-path }}
 
+  android-test:
+    name: Android Test
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android
+      - uses: Swatinem/rust-cache@v2
+      - name: Install cross
+        uses: taiki-e/install-action@cross
+      - run: |
+          cross test \
+            --target aarch64-linux-android \
+            --no-default-features \
+            --features sqlite-bundled \
+            --locked
+
   docs:
     name: Documentation
     runs-on: ubuntu-latest
