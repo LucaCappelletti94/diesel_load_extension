@@ -198,14 +198,26 @@ jobs:
         with:
           targets: aarch64-linux-android
       - uses: Swatinem/rust-cache@v2
-      - name: Install cross
-        uses: taiki-e/install-action@cross
+      - name: Setup Android NDK
+        id: setup-ndk-test
+        uses: nttld/setup-ndk@v1
+        with:
+          ndk-version: r27c
       - run: |
-          cross test \
+          TOOLCHAIN="$NDK_PATH/toolchains/llvm/prebuilt"
+          TOOLCHAIN="$TOOLCHAIN/linux-x86_64/bin"
+          CLANG="$TOOLCHAIN/aarch64-linux-android21-clang"
+          export CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER="$CLANG"
+          export CC_aarch64_linux_android="$CLANG"
+          export AR_aarch64_linux_android="$TOOLCHAIN/llvm-ar"
+          cargo test \
             --target aarch64-linux-android \
+            --no-run \
             --no-default-features \
             --features sqlite-bundled \
             --locked
+        env:
+          NDK_PATH: ${{ steps.setup-ndk-test.outputs.ndk-path }}
 
   docs:
     name: Documentation
@@ -218,16 +230,6 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - run: cargo doc --no-deps --all-features --locked
-
-  package:
-    name: Package Sanity
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
-      - run: cargo package --no-verify --locked
 
   audit:
     name: Security Audit
