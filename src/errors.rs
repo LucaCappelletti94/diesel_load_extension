@@ -36,12 +36,13 @@ pub enum LoadExtensionError {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use alloc::format;
 
     #[test]
     fn test_enable_failed_display() {
-        let err = LoadExtensionError::EnableFailed("not authorized".to_string());
+        let err = LoadExtensionError::EnableFailed(String::from("not authorized"));
         assert_eq!(
-            err.to_string(),
+            format!("{err}"),
             "Failed to enable load extension: not authorized"
         );
     }
@@ -49,20 +50,20 @@ mod tests {
     #[test]
     fn test_load_failed_display() {
         let err = LoadExtensionError::LoadFailed {
-            path: "mod_spatialite".to_string(),
-            message: "file not found".to_string(),
+            path: String::from("mod_spatialite"),
+            message: String::from("file not found"),
         };
         assert_eq!(
-            err.to_string(),
+            format!("{err}"),
             "Failed to load extension 'mod_spatialite': file not found"
         );
     }
 
     #[test]
     fn test_cleanup_failed_display() {
-        let err = LoadExtensionError::CleanupFailed("not authorized".to_string());
+        let err = LoadExtensionError::CleanupFailed(String::from("not authorized"));
         assert_eq!(
-            err.to_string(),
+            format!("{err}"),
             "Failed to disable load extension: not authorized"
         );
     }
@@ -71,7 +72,7 @@ mod tests {
     fn test_invalid_path_display() {
         let err = LoadExtensionError::InvalidPath;
         assert_eq!(
-            err.to_string(),
+            format!("{err}"),
             "Extension path contains an interior null byte"
         );
     }
@@ -80,7 +81,7 @@ mod tests {
     fn test_invalid_entry_point_display() {
         let err = LoadExtensionError::InvalidEntryPoint;
         assert_eq!(
-            err.to_string(),
+            format!("{err}"),
             "Entry point contains an interior null byte"
         );
     }

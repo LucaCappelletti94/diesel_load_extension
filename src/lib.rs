@@ -170,9 +170,9 @@ mod native_impl {
         path: &str,
         entry_point: Option<&str>,
     ) -> Result<(), String> {
-        let c_path = CString::new(path).map_err(|_| "invalid test path".to_owned())?;
+        let c_path = CString::new(path).map_err(|_| String::from("invalid test path"))?;
         let c_entry = entry_point
-            .map(|ep| CString::new(ep).map_err(|_| "invalid test entry point".to_owned()))
+            .map(|ep| CString::new(ep).map_err(|_| String::from("invalid test entry point")))
             .transpose()?;
 
         // SAFETY: `with_raw_connection` provides a valid SQLite pointer for the closure.
