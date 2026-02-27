@@ -14,7 +14,8 @@ fn test_load_extension_auto_enables_and_disables() {
     let result = conn.load_extension("/nonexistent/extension.so", None);
     assert!(result.is_err());
     match &result.unwrap_err() {
-        LoadExtensionError::LoadFailed(msg) => {
+        LoadExtensionError::LoadFailed { path, message: msg } => {
+            assert_eq!(path, "/nonexistent/extension.so");
             assert!(!msg.is_empty(), "Expected non-empty error message");
         }
         err => panic!("Expected LoadFailed, got: {err:?}"),
@@ -46,7 +47,8 @@ fn test_multiple_connections_are_independent() {
     let result = conn1.load_extension("/nonexistent/extension.so", None);
     assert!(result.is_err());
     match &result.unwrap_err() {
-        LoadExtensionError::LoadFailed(msg) => {
+        LoadExtensionError::LoadFailed { path, message: msg } => {
+            assert_eq!(path, "/nonexistent/extension.so");
             assert!(!msg.is_empty(), "Expected non-empty error message");
         }
         err => panic!("Expected LoadFailed, got: {err:?}"),
@@ -105,7 +107,7 @@ fn test_load_extensions_batch() {
     assert!(result.is_err());
     assert!(matches!(
         result.unwrap_err(),
-        LoadExtensionError::LoadFailed(_)
+        LoadExtensionError::LoadBatchFailed { index: 0, .. }
     ));
 }
 

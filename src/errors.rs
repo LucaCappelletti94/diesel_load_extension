@@ -11,8 +11,33 @@ pub enum LoadExtensionError {
     EnableFailed(String),
 
     /// Failed to load an extension from a shared library.
-    #[error("Failed to load extension: {0}")]
-    LoadFailed(String),
+    #[error("Failed to load extension '{path}': {message}")]
+    LoadFailed {
+        /// Extension path that failed to load.
+        path: String,
+        /// Raw `SQLite` error message.
+        message: String,
+    },
+
+    /// Failed to load an extension from a batch at the given index.
+    #[error("Failed to load extension at index {index} ('{path}'): {message}")]
+    LoadBatchFailed {
+        /// Index within the input batch slice.
+        index: usize,
+        /// Extension path that failed to load.
+        path: String,
+        /// Raw `SQLite` error message.
+        message: String,
+    },
+
+    /// Failed to disable extension loading after an operation.
+    #[error("Failed to disable extension loading after {after}: {message}")]
+    CleanupFailed {
+        /// Operation that ran before cleanup.
+        after: &'static str,
+        /// Underlying cleanup failure details.
+        message: String,
+    },
 
     /// The provided extension path contains an interior null byte.
     #[error("Extension path contains an interior null byte")]
@@ -21,10 +46,6 @@ pub enum LoadExtensionError {
     /// The provided entry point name contains an interior null byte.
     #[error("Entry point contains an interior null byte")]
     InvalidEntryPoint,
-
-    /// Extension loading is not supported on this platform.
-    #[error("Extension loading is not supported on this platform (WASM)")]
-    UnsupportedPlatform,
 }
 
 #[cfg(test)]
@@ -42,8 +63,39 @@ mod tests {
 
     #[test]
     fn test_load_failed_display() {
-        let err = LoadExtensionError::LoadFailed("file not found".to_string());
-        assert_eq!(err.to_string(), "Failed to load extension: file not found");
+        let err = LoadExtensionError::LoadFailed {
+            path: "mod_spatialite".to_string(),
+            message: "file not found".to_string(),
+        };
+        assert_eq!(
+            err.to_string(),
+            "Failed to load extension 'mod_spatialite': file not found"
+        );
+    }
+
+    #[test]
+    fn test_load_batch_failed_display() {
+        let err = LoadExtensionError::LoadBatchFailed {
+            index: 2,
+            path: "my_ext".to_string(),
+            message: "init symbol missing".to_string(),
+        };
+        assert_eq!(
+            err.to_string(),
+            "Failed to load extension at index 2 ('my_ext'): init symbol missing"
+        );
+    }
+
+    #[test]
+    fn test_cleanup_failed_display() {
+        let err = LoadExtensionError::CleanupFailed {
+            after: "load_extension",
+            message: "not authorized".to_string(),
+        };
+        assert_eq!(
+            err.to_string(),
+            "Failed to disable extension loading after load_extension: not authorized"
+        );
     }
 
     #[test]
@@ -61,15 +113,6 @@ mod tests {
         assert_eq!(
             err.to_string(),
             "Entry point contains an interior null byte"
-        );
-    }
-
-    #[test]
-    fn test_unsupported_platform_display() {
-        let err = LoadExtensionError::UnsupportedPlatform;
-        assert_eq!(
-            err.to_string(),
-            "Extension loading is not supported on this platform (WASM)"
         );
     }
 
