@@ -4,8 +4,11 @@ name: CI
 'on':
   push:
     branches: [main]
+    tags:
+      - "v*"
   pull_request:
     branches: [main]
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -77,14 +80,14 @@ jobs:
       - run: cargo test --verbose --locked
 
   ios:
-    name: iOS Build
+    name: iOS Test
     runs-on: macos-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
         with:
-          targets: aarch64-apple-ios
+          targets: aarch64-apple-ios,aarch64-apple-ios-sim
       - uses: Swatinem/rust-cache@v2
       - run: |
           cargo check \
@@ -92,6 +95,54 @@ jobs:
             --no-default-features \
             --features sqlite-bundled \
             --locked
+      - name: Boot iOS simulator
+        run: |
+          RUNTIME_JSON="$(xcrun simctl list runtimes --json \
+            | jq -c '.runtimes
+              | map(select(.isAvailable == true))
+              | map(select(.name | contains("iOS")))
+              | .[-1]')"
+          RUNTIME_ID="$(echo "$RUNTIME_JSON" | jq -r '.identifier')"
+          DEVICE_TYPE_ID="$(echo "$RUNTIME_JSON" \
+            | jq -r '.supportedDeviceTypes
+              | map(select(.productFamily == "iPhone"))
+              | .[0].identifier')"
+
+          if [ -z "$RUNTIME_ID" ] || [ "$RUNTIME_ID" = "null" ]; then
+            echo "No available iOS simulator runtime found"
+            exit 1
+          fi
+          if [ -z "$DEVICE_TYPE_ID" ] || [ "$DEVICE_TYPE_ID" = "null" ]; then
+            echo "No available iPhone simulator device type found"
+            exit 1
+          fi
+
+          SIM_UDID="$(xcrun simctl create ci-rust-ios \
+            "$DEVICE_TYPE_ID" "$RUNTIME_ID")"
+          echo "SIMULATOR_UDID=$SIM_UDID" >> "$GITHUB_ENV"
+          echo "Selected runtime: $RUNTIME_ID"
+          echo "Selected device type: $DEVICE_TYPE_ID"
+          echo "Created simulator: $SIM_UDID"
+
+          xcrun simctl boot "$SIM_UDID"
+          xcrun simctl bootstatus "$SIM_UDID" -b
+      - name: Run iOS simulator tests
+        run: |
+          cargo test \
+            --target aarch64-apple-ios-sim \
+            --no-default-features \
+            --features sqlite-bundled \
+            --locked
+        env:
+          CARGO_TARGET_AARCH64_APPLE_IOS_SIM_RUNNER: >-
+            xcrun simctl spawn ${{ env.SIMULATOR_UDID }}
+      - name: Cleanup iOS simulator
+        if: always()
+        run: |
+          if [ -n "${SIMULATOR_UDID:-}" ]; then
+            xcrun simctl shutdown "$SIMULATOR_UDID" || true
+            xcrun simctl delete "$SIMULATOR_UDID" || true
+          fi
 
   android:
     name: Android Build
