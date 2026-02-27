@@ -1,5 +1,8 @@
 #![doc = include_str!("../README.md")]
 #![deny(missing_docs)]
+#![cfg_attr(not(feature = "std"), no_std)]
+
+extern crate alloc;
 
 #[cfg(all(target_family = "wasm", target_os = "unknown"))]
 compile_error!(
@@ -11,49 +14,18 @@ mod ffi;
 
 pub use errors::LoadExtensionError;
 
-use std::ffi::CString;
-
 /// Extension trait for [`diesel::SqliteConnection`] providing `SQLite` load extension support.
 #[diagnostic::on_unimplemented(
     message = "`SqliteLoadExtensionExt` is only implemented for `diesel::SqliteConnection`"
 )]
 pub trait SqliteLoadExtensionExt {
-    /// Enable or disable the ability to load `SQLite` extensions.
-    ///
-    /// This wraps [`sqlite3_enable_load_extension`](https://www.sqlite.org/c3ref/enable_load_extension.html).
-    ///
-    /// By default, extension loading is disabled in `SQLite` for security reasons.
-    /// Most users should prefer [`load_extension`](Self::load_extension), which
-    /// automatically enables and disables extension loading around the load call.
-    ///
-    /// This method is useful when you need fine-grained control over the
-    /// extension loading lifecycle, for example when loading many extensions
-    /// in a batch.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`LoadExtensionError::EnableFailed`] if `SQLite` returns a non-OK status code.
-    ///
-    /// # Examples
-    ///
-    /// ```rust
-    /// use diesel::prelude::*;
-    /// use diesel::SqliteConnection;
-    /// use diesel_load_extension::SqliteLoadExtensionExt;
-    ///
-    /// let mut conn = SqliteConnection::establish(":memory:").unwrap();
-    /// conn.enable_load_extension(true).unwrap();
-    /// conn.enable_load_extension(false).unwrap();
-    /// ```
-    fn enable_load_extension(&mut self, enabled: bool) -> Result<(), LoadExtensionError>;
-
     /// Load a `SQLite` extension from a shared library file.
     ///
-    /// This method automatically enables extension loading before the load and
-    /// disables it afterward, ensuring extension loading is never left enabled
-    /// unintentionally.
+    /// This method enables extension loading, loads one extension, and then
+    /// disables extension loading again.
     ///
-    /// This wraps [`sqlite3_load_extension`](https://www.sqlite.org/c3ref/load_extension.html).
+    /// It wraps [`sqlite3_enable_load_extension`](https://www.sqlite.org/c3ref/enable_load_extension.html)
+    /// and [`sqlite3_load_extension`](https://www.sqlite.org/c3ref/load_extension.html).
     ///
     /// # Arguments
     ///
@@ -68,12 +40,6 @@ pub trait SqliteLoadExtensionExt {
     /// Returns [`LoadExtensionError::InvalidPath`] if `path` contains a null byte.
     /// Returns [`LoadExtensionError::InvalidEntryPoint`] if `entry_point` contains a null byte.
     /// Returns [`LoadExtensionError::CleanupFailed`] if disabling extension loading fails.
-    ///
-    /// # Panics
-    ///
-    /// No user-provided callbacks run between the enable and disable calls, so
-    /// panics are unlikely. If a panic did occur (e.g., OOM in an allocation),
-    /// a best-effort guard disables extension loading when the stack unwinds.
     ///
     /// # Examples
     ///
@@ -91,104 +57,72 @@ pub trait SqliteLoadExtensionExt {
         path: &str,
         entry_point: Option<&str>,
     ) -> Result<(), LoadExtensionError>;
-
-    /// Load multiple `SQLite` extensions in a single enable/disable cycle.
-    ///
-    /// This is more efficient than calling [`load_extension`](Self::load_extension)
-    /// repeatedly when loading several extensions, since it only enables and
-    /// disables extension loading once.
-    ///
-    /// Extensions are loaded in order. If any extension fails to load, the
-    /// remaining extensions are skipped and extension loading is disabled
-    /// before the error is returned.
-    ///
-    /// If the extension list is empty, this returns `Ok(())` immediately
-    /// without enabling or disabling extension loading.
-    ///
-    /// # Errors
-    ///
-    /// Returns the first error encountered, whether from enabling, loading,
-    /// or disabling extension loading.
-    ///
-    /// Extension load failures are reported as [`LoadExtensionError::LoadBatchFailed`],
-    /// including the failing extension index and path.
-    ///
-    /// # Panics
-    ///
-    /// No user-provided callbacks run between the enable and disable calls, so
-    /// panics are unlikely. If a panic did occur (e.g., OOM in an allocation),
-    /// a best-effort guard disables extension loading when the stack unwinds.
-    ///
-    /// # Examples
-    ///
-    /// ```rust
-    /// use diesel::prelude::*;
-    /// use diesel::SqliteConnection;
-    /// use diesel_load_extension::{LoadExtensionError, SqliteLoadExtensionExt};
-    ///
-    /// let mut conn = SqliteConnection::establish(":memory:").unwrap();
-    /// let result = conn.load_extensions(&[
-    ///     ("nonexistent_ext1", None),
-    ///     ("nonexistent_ext2", Some("init")),
-    /// ]);
-    /// assert!(matches!(result, Err(LoadExtensionError::LoadBatchFailed { .. })));
-    /// ```
-    fn load_extensions(
-        &mut self,
-        extensions: &[(&str, Option<&str>)],
-    ) -> Result<(), LoadExtensionError>;
-}
-
-/// Validate and convert extension inputs to C strings.
-fn validate_inputs(
-    extensions: &[(&str, Option<&str>)],
-) -> Result<Vec<(CString, Option<CString>)>, LoadExtensionError> {
-    extensions
-        .iter()
-        .map(|(path, entry_point)| {
-            let c_path = CString::new(*path).map_err(|_| LoadExtensionError::InvalidPath)?;
-            let c_entry = entry_point
-                .map(|ep| CString::new(ep).map_err(|_| LoadExtensionError::InvalidEntryPoint))
-                .transpose()?;
-            Ok((c_path, c_entry))
-        })
-        .collect()
 }
 
 // Native implementation — uses real FFI calls.
 mod native_impl {
-    use super::{ffi, validate_inputs, LoadExtensionError, SqliteLoadExtensionExt};
+    use super::{ffi, LoadExtensionError, SqliteLoadExtensionExt};
+    use alloc::ffi::CString;
+    use alloc::format;
+    use alloc::string::String;
+    use core::ffi::{c_char, CStr};
+    use core::ptr;
     use diesel::SqliteConnection;
-    use std::ffi::{c_char, CStr, CString};
-    use std::ptr;
+
+    #[allow(unsafe_code)]
+    fn sqlite_error_message(raw: *mut ffi::sqlite3) -> String {
+        // SAFETY: `raw` is a valid SQLite connection pointer from Diesel.
+        let err_ptr = unsafe { ffi::sqlite3_errmsg(raw) };
+        // SAFETY: `sqlite3_errmsg` returns a valid, null-terminated C string.
+        unsafe { CStr::from_ptr(err_ptr).to_string_lossy().into_owned() }
+    }
+
+    #[allow(unsafe_code)]
+    fn toggle_extension_loading(raw: *mut ffi::sqlite3, enabled: bool) -> Result<(), String> {
+        // SAFETY: `raw` is a valid SQLite connection pointer from Diesel.
+        let rc = unsafe { ffi::sqlite3_enable_load_extension(raw, i32::from(enabled)) };
+        if rc == ffi::SQLITE_OK {
+            Ok(())
+        } else {
+            Err(sqlite_error_message(raw))
+        }
+    }
+
+    #[allow(unsafe_code)]
+    fn load_extension_once(
+        raw: *mut ffi::sqlite3,
+        c_path: &CString,
+        c_entry: Option<&CString>,
+    ) -> Result<(), String> {
+        let mut err_msg: *mut c_char = ptr::null_mut();
+        let entry_ptr = c_entry.map_or(ptr::null(), |c| c.as_ptr());
+
+        // SAFETY:
+        // - `raw` is a valid SQLite connection pointer.
+        // - `c_path` and `c_entry` are valid C strings for the duration of the call.
+        // - `err_msg` is a valid out-pointer for SQLite to populate.
+        let rc = unsafe {
+            ffi::sqlite3_load_extension(raw, c_path.as_ptr(), entry_ptr, &raw mut err_msg)
+        };
+
+        if rc == ffi::SQLITE_OK {
+            return Ok(());
+        }
+
+        if err_msg.is_null() {
+            return Err(sqlite_error_message(raw));
+        }
+
+        // SAFETY: non-null `err_msg` points to a valid null-terminated SQLite error string.
+        let msg = unsafe { CStr::from_ptr(err_msg).to_string_lossy().into_owned() };
+        // SAFETY: non-null `err_msg` is owned by SQLite and must be freed with `sqlite3_free`.
+        unsafe { ffi::sqlite3_free(err_msg.cast()) };
+        Err(msg)
+    }
 
     #[allow(unsafe_code)]
     impl SqliteLoadExtensionExt for SqliteConnection {
-        // The `with_raw_connection` API requires a single outer `unsafe` block that
-        // encompasses both the method call and the FFI calls within the closure.
         #[allow(clippy::multiple_unsafe_ops_per_block)]
-        fn enable_load_extension(&mut self, enabled: bool) -> Result<(), LoadExtensionError> {
-            let onoff = i32::from(enabled);
-            // SAFETY: `with_raw_connection` provides a valid database pointer.
-            // `sqlite3_enable_load_extension` receives that valid pointer and a valid
-            // integer flag (0 or 1). On failure, `sqlite3_errmsg` is called with the
-            // same valid pointer to retrieve the human-readable error message.
-            unsafe {
-                self.with_raw_connection(|raw| {
-                    let rc = ffi::sqlite3_enable_load_extension(raw, onoff);
-                    if rc != ffi::SQLITE_OK {
-                        // SAFETY: `sqlite3_errmsg` returns a valid, null-terminated
-                        // C string for any valid database pointer (never null).
-                        let msg = CStr::from_ptr(ffi::sqlite3_errmsg(raw))
-                            .to_string_lossy()
-                            .into_owned();
-                        return Err(LoadExtensionError::EnableFailed(msg));
-                    }
-                    Ok(())
-                })
-            }
-        }
-
         fn load_extension(
             &mut self,
             path: &str,
@@ -198,181 +132,52 @@ mod native_impl {
             let c_entry = entry_point
                 .map(|ep| CString::new(ep).map_err(|_| LoadExtensionError::InvalidEntryPoint))
                 .transpose()?;
-            let path = path.to_owned();
+            let path = String::from(path);
 
-            with_extension_enabled(self, "load_extension", |conn| {
-                raw_load_extension(conn, &c_path, c_entry.as_ref()).map_err(|message| {
-                    LoadExtensionError::LoadFailed {
-                        path: path.clone(),
-                        message,
+            // SAFETY: `with_raw_connection` provides a valid SQLite pointer for the closure.
+            unsafe {
+                self.with_raw_connection(|raw| {
+                    toggle_extension_loading(raw, true)
+                        .map_err(LoadExtensionError::EnableFailed)?;
+                    let load_result = load_extension_once(raw, &c_path, c_entry.as_ref());
+                    let disable_result = toggle_extension_loading(raw, false);
+
+                    match (load_result, disable_result) {
+                        (Ok(()), Ok(())) => Ok(()),
+                        (Err(load_message), Ok(())) => Err(LoadExtensionError::LoadFailed {
+                            path: path.clone(),
+                            message: load_message,
+                        }),
+                        (Ok(()), Err(cleanup_message)) => {
+                            Err(LoadExtensionError::CleanupFailed(cleanup_message))
+                        }
+                        (Err(load_message), Err(cleanup_message)) => {
+                            Err(LoadExtensionError::CleanupFailed(format!(
+                                "{cleanup_message}; load also failed for '{path}': {load_message}"
+                            )))
+                        }
                     }
                 })
-            })
-        }
-
-        fn load_extensions(
-            &mut self,
-            extensions: &[(&str, Option<&str>)],
-        ) -> Result<(), LoadExtensionError> {
-            if extensions.is_empty() {
-                return Ok(());
-            }
-
-            let c_extensions = validate_inputs(extensions)?;
-
-            with_extension_enabled(self, "load_extensions", |conn| {
-                for (index, (c_path, c_entry)) in c_extensions.iter().enumerate() {
-                    raw_load_extension(conn, c_path, c_entry.as_ref()).map_err(|message| {
-                        LoadExtensionError::LoadBatchFailed {
-                            index,
-                            path: extensions[index].0.to_owned(),
-                            message,
-                        }
-                    })?;
-                }
-                Ok(())
-            })
-        }
-    }
-
-    fn with_extension_enabled<T, F>(
-        conn: &mut SqliteConnection,
-        after: &'static str,
-        f: F,
-    ) -> Result<T, LoadExtensionError>
-    where
-        F: FnOnce(&mut SqliteConnection) -> Result<T, LoadExtensionError>,
-    {
-        with_extension_enabled_and_disable(conn, after, f, |conn| {
-            conn.enable_load_extension(false).map_err(|err| match err {
-                LoadExtensionError::EnableFailed(msg) => msg,
-                other => other.to_string(),
-            })
-        })
-    }
-
-    fn with_extension_enabled_and_disable<T, F, D>(
-        conn: &mut SqliteConnection,
-        after: &'static str,
-        f: F,
-        disable: D,
-    ) -> Result<T, LoadExtensionError>
-    where
-        F: FnOnce(&mut SqliteConnection) -> Result<T, LoadExtensionError>,
-        D: FnOnce(&mut SqliteConnection) -> Result<(), String>,
-    {
-        conn.enable_load_extension(true)?;
-        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| f(conn)));
-        let disable_result = disable(conn);
-
-        match result {
-            Ok(Ok(value)) => {
-                if let Err(message) = disable_result {
-                    return Err(LoadExtensionError::CleanupFailed { after, message });
-                }
-                Ok(value)
-            }
-            Ok(Err(operation_err)) => {
-                if let Err(message) = disable_result {
-                    return Err(LoadExtensionError::CleanupFailed {
-                        after,
-                        message: format!("{message}; operation also failed: {operation_err}"),
-                    });
-                }
-                Err(operation_err)
-            }
-            Err(payload) => {
-                let _ = disable_result;
-                std::panic::resume_unwind(payload);
             }
         }
     }
 
     #[cfg(test)]
     #[allow(clippy::redundant_pub_crate)]
-    pub(super) fn test_with_extension_enabled_panics(conn: &mut SqliteConnection) {
-        let _ = with_extension_enabled(
-            conn,
-            "load_extension",
-            |_conn| -> Result<(), LoadExtensionError> {
-                panic!("intentional panic for test");
-                #[allow(unreachable_code)]
-                Ok(())
-            },
-        );
-    }
-
-    #[cfg(test)]
-    #[allow(clippy::redundant_pub_crate)]
-    pub(super) fn test_cleanup_error_after_success(
-        conn: &mut SqliteConnection,
-    ) -> Result<(), LoadExtensionError> {
-        with_extension_enabled_and_disable(
-            conn,
-            "load_extension",
-            |_conn| Ok(()),
-            |_conn| Err("forced cleanup failure".to_owned()),
-        )
-    }
-
-    #[cfg(test)]
-    #[allow(clippy::redundant_pub_crate)]
-    pub(super) fn test_cleanup_error_after_operation_failure(
-        conn: &mut SqliteConnection,
-    ) -> Result<(), LoadExtensionError> {
-        with_extension_enabled_and_disable(
-            conn,
-            "load_extensions",
-            |_conn| {
-                Err(LoadExtensionError::LoadBatchFailed {
-                    index: 1,
-                    path: "ext.so".to_owned(),
-                    message: "forced operation failure".to_owned(),
-                })
-            },
-            |_conn| Err("forced cleanup failure".to_owned()),
-        )
-    }
-
-    /// Raw FFI call to `sqlite3_load_extension`, without enable/disable management.
     #[allow(unsafe_code)]
-    #[allow(clippy::multiple_unsafe_ops_per_block)]
-    pub fn raw_load_extension(
+    pub(super) fn raw_load_extension_without_toggle(
         conn: &mut SqliteConnection,
-        c_path: &CString,
-        c_entry: Option<&CString>,
+        path: &str,
+        entry_point: Option<&str>,
     ) -> Result<(), String> {
-        // SAFETY:
-        // - `with_raw_connection` provides a valid database pointer.
-        // - `sqlite3_load_extension`: receives valid C strings (or null) from
-        //   `CString::as_ptr` and a valid out-pointer for the error message.
-        // - `CStr::from_ptr`: SQLite guarantees that a non-null `err_msg` is a
-        //   valid, null-terminated C string.
-        // - `sqlite3_free`: required to free the SQLite-allocated error message
-        //   when non-null, as documented by the SQLite API.
+        let c_path = CString::new(path).map_err(|_| "invalid test path".to_owned())?;
+        let c_entry = entry_point
+            .map(|ep| CString::new(ep).map_err(|_| "invalid test entry point".to_owned()))
+            .transpose()?;
+
+        // SAFETY: `with_raw_connection` provides a valid SQLite pointer for the closure.
         unsafe {
-            conn.with_raw_connection(|raw| {
-                let mut err_msg: *mut c_char = ptr::null_mut();
-                let entry_ptr = c_entry.map_or(ptr::null(), |c| c.as_ptr());
-
-                let rc =
-                    ffi::sqlite3_load_extension(raw, c_path.as_ptr(), entry_ptr, &raw mut err_msg);
-
-                if rc != ffi::SQLITE_OK {
-                    let message = if err_msg.is_null() {
-                        CStr::from_ptr(ffi::sqlite3_errmsg(raw))
-                            .to_string_lossy()
-                            .into_owned()
-                    } else {
-                        let msg = CStr::from_ptr(err_msg).to_string_lossy().into_owned();
-                        ffi::sqlite3_free(err_msg.cast());
-                        msg
-                    };
-                    return Err(message);
-                }
-
-                Ok(())
-            })
+            conn.with_raw_connection(|raw| load_extension_once(raw, &c_path, c_entry.as_ref()))
         }
     }
 }
@@ -381,57 +186,25 @@ mod native_impl {
 mod tests {
     use super::{native_impl, LoadExtensionError, SqliteLoadExtensionExt};
     use diesel::prelude::*;
-    use std::ffi::CString;
 
     fn create_connection() -> SqliteConnection {
         SqliteConnection::establish(":memory:").expect("Failed to create in-memory connection")
     }
 
     #[test]
-    fn test_enable_load_extension() {
-        let mut conn = create_connection();
-        conn.enable_load_extension(true)
-            .expect("Failed to enable load extension");
-    }
-
-    #[test]
-    fn test_disable_load_extension() {
-        let mut conn = create_connection();
-        conn.enable_load_extension(false)
-            .expect("Failed to disable load extension");
-    }
-
-    #[test]
-    fn test_enable_then_disable_load_extension() {
-        let mut conn = create_connection();
-        conn.enable_load_extension(true)
-            .expect("Failed to enable load extension");
-        conn.enable_load_extension(false)
-            .expect("Failed to disable load extension");
-    }
-
-    #[test]
     fn test_load_nonexistent_extension() {
         let mut conn = create_connection();
-
         let result = conn.load_extension("/nonexistent/path/to/extension.so", None);
-        assert!(result.is_err());
-        assert!(matches!(
-            result.unwrap_err(),
-            LoadExtensionError::LoadFailed { .. }
-        ));
+        assert!(matches!(result, Err(LoadExtensionError::LoadFailed { .. })));
     }
 
     #[test]
     fn test_load_extension_disables_after_failure() {
         let mut conn = create_connection();
-
-        // load_extension should auto-disable even on failure
         let _ = conn.load_extension("/nonexistent/extension.so", None);
 
-        // Verify extension loading is now disabled by using the raw FFI path
-        let c_path = CString::new("some_extension").unwrap();
-        let result = native_impl::raw_load_extension(&mut conn, &c_path, None);
+        let result =
+            native_impl::raw_load_extension_without_toggle(&mut conn, "some_extension", None);
         assert!(result.is_err());
         assert!(
             !result.unwrap_err().is_empty(),
@@ -442,19 +215,13 @@ mod tests {
     #[test]
     fn test_load_extension_with_entry_point() {
         let mut conn = create_connection();
-
         let result = conn.load_extension("/nonexistent/extension.so", Some("my_init"));
-        assert!(result.is_err());
-        assert!(matches!(
-            result.unwrap_err(),
-            LoadExtensionError::LoadFailed { .. }
-        ));
+        assert!(matches!(result, Err(LoadExtensionError::LoadFailed { .. })));
     }
 
     #[test]
     fn test_invalid_path_null_byte() {
         let mut conn = create_connection();
-
         let result = conn.load_extension("path\0with_null", None);
         assert!(matches!(
             result.unwrap_err(),
@@ -465,128 +232,10 @@ mod tests {
     #[test]
     fn test_invalid_entry_point_null_byte() {
         let mut conn = create_connection();
-
         let result = conn.load_extension("some_extension", Some("entry\0point"));
         assert!(matches!(
             result.unwrap_err(),
             LoadExtensionError::InvalidEntryPoint
         ));
-    }
-
-    #[test]
-    fn test_enable_load_extension_idempotent() {
-        let mut conn = create_connection();
-        conn.enable_load_extension(true).unwrap();
-        conn.enable_load_extension(true).unwrap();
-        conn.enable_load_extension(false).unwrap();
-        conn.enable_load_extension(false).unwrap();
-    }
-
-    #[test]
-    fn test_load_extensions_empty_list() {
-        let mut conn = create_connection();
-        conn.load_extensions(&[])
-            .expect("Loading empty extension list should succeed");
-    }
-
-    #[test]
-    fn test_load_extensions_nonexistent() {
-        let mut conn = create_connection();
-        let result = conn.load_extensions(&[
-            ("/nonexistent/ext1.so", None),
-            ("/nonexistent/ext2.so", None),
-        ]);
-        assert!(result.is_err());
-        assert!(matches!(
-            result.unwrap_err(),
-            LoadExtensionError::LoadBatchFailed { .. }
-        ));
-    }
-
-    #[test]
-    fn test_load_extensions_invalid_path() {
-        let mut conn = create_connection();
-        let result = conn.load_extensions(&[("valid_path", None), ("path\0null", None)]);
-        assert!(matches!(
-            result.unwrap_err(),
-            LoadExtensionError::InvalidPath
-        ));
-    }
-
-    #[test]
-    fn test_load_extensions_disables_after_failure() {
-        let mut conn = create_connection();
-
-        let _ = conn.load_extensions(&[("/nonexistent/ext.so", None)]);
-
-        // Verify extension loading is now disabled
-        let c_path = CString::new("some_extension").unwrap();
-        let result = native_impl::raw_load_extension(&mut conn, &c_path, None);
-        assert!(result.is_err());
-        assert!(
-            !result.unwrap_err().is_empty(),
-            "Expected non-empty error message"
-        );
-    }
-
-    #[test]
-    fn test_cleanup_failure_after_success_is_reported() {
-        let mut conn = create_connection();
-        let result = native_impl::test_cleanup_error_after_success(&mut conn);
-        assert!(result.is_err());
-        match result.unwrap_err() {
-            LoadExtensionError::CleanupFailed { after, message } => {
-                assert_eq!(after, "load_extension");
-                assert!(
-                    message.contains("forced cleanup failure"),
-                    "Expected forced cleanup failure in message, got: {message}"
-                );
-            }
-            err => panic!("Expected CleanupFailed, got: {err:?}"),
-        }
-    }
-
-    #[test]
-    fn test_cleanup_failure_after_operation_failure_is_reported() {
-        let mut conn = create_connection();
-        let result = native_impl::test_cleanup_error_after_operation_failure(&mut conn);
-        assert!(result.is_err());
-        match result.unwrap_err() {
-            LoadExtensionError::CleanupFailed { after, message } => {
-                assert_eq!(after, "load_extensions");
-                assert!(
-                    message.contains("forced cleanup failure"),
-                    "Expected forced cleanup failure in message, got: {message}"
-                );
-                assert!(
-                    message.contains("operation also failed"),
-                    "Expected operation failure context in message, got: {message}"
-                );
-                assert!(
-                    message.contains("index 1"),
-                    "Expected batch index context in message, got: {message}"
-                );
-            }
-            err => panic!("Expected CleanupFailed, got: {err:?}"),
-        }
-    }
-
-    #[test]
-    fn test_load_extension_disables_after_panic() {
-        let mut conn = create_connection();
-
-        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            native_impl::test_with_extension_enabled_panics(&mut conn);
-        }));
-        assert!(result.is_err(), "Expected panic to be caught");
-
-        // Verify extension loading is now disabled
-        let c_path = CString::new("some_extension").unwrap();
-        let result = native_impl::raw_load_extension(&mut conn, &c_path, None);
-        assert!(result.is_err());
-        assert!(
-            !result.unwrap_err().is_empty(),
-            "Expected non-empty error message"
-        );
     }
 }

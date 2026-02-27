@@ -61,25 +61,7 @@ fn main() {
 }
 ```
 
-### Loading Multiple Extensions
-
-When loading several extensions, use `load_extensions` to enable and disable extension loading only once:
-
-```rust
-use diesel::prelude::*;
-use diesel::SqliteConnection;
-use diesel_load_extension::{LoadExtensionError, SqliteLoadExtensionExt};
-
-let mut conn = SqliteConnection::establish(":memory:").unwrap();
-let result = conn.load_extensions(&[
-    ("mod_spatialite", None),
-    ("my_extension", Some("my_extension_init")),
-]);
-assert!(matches!(
-    result,
-    Err(LoadExtensionError::LoadBatchFailed { .. })
-));
-```
+Call `load_extension` once per extension you need to load.
 
 ### Custom Entry Points
 

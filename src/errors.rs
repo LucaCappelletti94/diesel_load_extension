@@ -1,13 +1,14 @@
 //! Error types for `SQLite` load extension operations.
 
+use alloc::string::String;
 use thiserror::Error;
 
 /// Errors that can occur when working with `SQLite` load extension functionality.
 #[derive(Debug, Error)]
 #[non_exhaustive]
 pub enum LoadExtensionError {
-    /// Failed to enable or disable load extension support.
-    #[error("Failed to enable/disable load extension: {0}")]
+    /// Failed to enable extension loading before the load operation.
+    #[error("Failed to enable load extension: {0}")]
     EnableFailed(String),
 
     /// Failed to load an extension from a shared library.
@@ -19,25 +20,9 @@ pub enum LoadExtensionError {
         message: String,
     },
 
-    /// Failed to load an extension from a batch at the given index.
-    #[error("Failed to load extension at index {index} ('{path}'): {message}")]
-    LoadBatchFailed {
-        /// Index within the input batch slice.
-        index: usize,
-        /// Extension path that failed to load.
-        path: String,
-        /// Raw `SQLite` error message.
-        message: String,
-    },
-
-    /// Failed to disable extension loading after an operation.
-    #[error("Failed to disable extension loading after {after}: {message}")]
-    CleanupFailed {
-        /// Operation that ran before cleanup.
-        after: &'static str,
-        /// Underlying cleanup failure details.
-        message: String,
-    },
+    /// Failed to disable extension loading after the operation.
+    #[error("Failed to disable load extension: {0}")]
+    CleanupFailed(String),
 
     /// The provided extension path contains an interior null byte.
     #[error("Extension path contains an interior null byte")]
@@ -57,7 +42,7 @@ mod tests {
         let err = LoadExtensionError::EnableFailed("not authorized".to_string());
         assert_eq!(
             err.to_string(),
-            "Failed to enable/disable load extension: not authorized"
+            "Failed to enable load extension: not authorized"
         );
     }
 
@@ -74,27 +59,11 @@ mod tests {
     }
 
     #[test]
-    fn test_load_batch_failed_display() {
-        let err = LoadExtensionError::LoadBatchFailed {
-            index: 2,
-            path: "my_ext".to_string(),
-            message: "init symbol missing".to_string(),
-        };
-        assert_eq!(
-            err.to_string(),
-            "Failed to load extension at index 2 ('my_ext'): init symbol missing"
-        );
-    }
-
-    #[test]
     fn test_cleanup_failed_display() {
-        let err = LoadExtensionError::CleanupFailed {
-            after: "load_extension",
-            message: "not authorized".to_string(),
-        };
+        let err = LoadExtensionError::CleanupFailed("not authorized".to_string());
         assert_eq!(
             err.to_string(),
-            "Failed to disable extension loading after load_extension: not authorized"
+            "Failed to disable load extension: not authorized"
         );
     }
 
@@ -117,6 +86,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "std")]
     fn test_error_is_std_error() {
         fn assert_std_error<T: std::error::Error>() {}
         assert_std_error::<LoadExtensionError>();

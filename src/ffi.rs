@@ -1,7 +1,7 @@
 //! Hand-written FFI bindings for `SQLite` load extension functions.
 
+use core::ffi::{c_char, c_int};
 pub use libsqlite3_sys::{sqlite3, sqlite3_free, SQLITE_OK};
-use std::os::raw::{c_char, c_int};
 
 // On native targets, declare the load extension FFI functions as hand-written
 // extern "C" bindings that link to the SQLite C library.

@@ -14,12 +14,13 @@ categories = ["database"]
 
 
 [features]
-default = ["sqlite-bundled"]
+default = ["std", "sqlite-bundled"]
+std = ["diesel/std", "thiserror/std"]
 sqlite-bundled = ["libsqlite3-sys/bundled"]
 
 [dependencies]
-diesel = { version = "2.3.6", git = "https://github.com/diesel-rs/diesel", branch = "main", features = ["sqlite"] }
-thiserror = "2"
+diesel = { version = "2.3.6", git = "https://github.com/diesel-rs/diesel", branch = "main", default-features = false, features = ["sqlite-no-std"] }
+thiserror = { version = "2", default-features = false }
 libsqlite3-sys = { version = "0.31" }
 
 [lints.rust]
