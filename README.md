@@ -9,17 +9,20 @@ This crate provides a safe Rust wrapper around `SQLite`'s [`sqlite3_load_extensi
 
 Note: not all `SQLite` builds include the load-extension ABI. Builds compiled with `SQLITE_OMIT_LOAD_EXTENSION` omit these symbols entirely, and linking will fail if they are missing.
 
-This crate is native-only. On `wasm32-unknown-unknown`, use
-[`sqlite-wasm-rs`](https://crates.io/crates/sqlite-wasm-rs) directly with
-`sqlite3_auto_extension` for precompiled extensions.
+This crate is native-only. On `wasm32-unknown-unknown`, use [`sqlite-wasm-rs`](https://crates.io/crates/sqlite-wasm-rs) directly with `sqlite3_auto_extension` for precompiled extensions.
 
-This crate depends on Diesel's `with_raw_connection` API to access the raw `SQLite`
-connection handle (`*mut sqlite3`) in a scoped and safe way.
-
-`with_raw_connection` is available on Diesel's `main` branch and may not yet be
-available in the latest crates.io release.
+This crate depends on Diesel's `with_raw_connection` API to access the raw `SQLite` connection handle (`*mut sqlite3`) in a scoped and safe way. `with_raw_connection` is available on Diesel's `main` branch and may not yet be available in the latest crates.io release.
 
 Because of that dependency, this crate is currently configured as `publish = false`.
+
+## Platform Support
+
+This crate is continuously validated in CI across desktop and mobile targets.
+
+- iOS: CI runs `cargo test` on `aarch64-apple-ios-sim` in an iOS simulator, and also runs a build check for `aarch64-apple-ios`.
+- Android: CI runs `cross test` for `aarch64-linux-android`, and also runs a build check for `aarch64-linux-android`.
+
+So yes: this crate is tested in CI and verified to work on both iOS and Android targets.
 
 ## Usage
 
