@@ -1,6 +1,7 @@
+---
 name: CI
 
-on:
+'on':
   push:
     branches: [main]
   pull_request:
@@ -75,6 +76,53 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - run: cargo test --verbose --locked
 
+  ios:
+    name: iOS Build
+    runs-on: macos-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-ios
+      - uses: Swatinem/rust-cache@v2
+      - run: |
+          cargo check \
+            --target aarch64-apple-ios \
+            --no-default-features \
+            --features sqlite-bundled \
+            --locked
+
+  android:
+    name: Android Build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android
+      - uses: Swatinem/rust-cache@v2
+      - name: Setup Android NDK
+        id: setup-ndk
+        uses: nttld/setup-ndk@v1
+        with:
+          ndk-version: r27c
+      - run: |
+          TOOLCHAIN="$NDK_PATH/toolchains/llvm/prebuilt"
+          TOOLCHAIN="$TOOLCHAIN/linux-x86_64/bin"
+          CLANG="$TOOLCHAIN/aarch64-linux-android21-clang"
+          export CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER="$CLANG"
+          export CC_aarch64_linux_android="$CLANG"
+          export AR_aarch64_linux_android="$TOOLCHAIN/llvm-ar"
+          cargo check \
+            --target aarch64-linux-android \
+            --no-default-features \
+            --features sqlite-bundled \
+            --locked
+        env:
+          NDK_PATH: ${{ steps.setup-ndk.outputs.ndk-path }}
+
   docs:
     name: Documentation
     runs-on: ubuntu-latest
@@ -120,7 +168,12 @@ jobs:
       - name: Install cargo-llvm-cov
         uses: taiki-e/install-action@cargo-llvm-cov
       - name: Generate coverage
-        run: cargo llvm-cov --all-features --locked --lcov --output-path lcov.info
+        run: |
+          cargo llvm-cov \
+            --all-features \
+            --locked \
+            --lcov \
+            --output-path lcov.info
       - name: Upload coverage
         uses: codecov/codecov-action@v4
         with:
