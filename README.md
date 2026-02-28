@@ -19,12 +19,12 @@ CI now validates both linkage modes:
 | Target | Bundled `SQLite` lane | System `SQLite` lane | Guarantee level |
 | --- | --- | --- | --- |
 | `ubuntu-latest` | `cargo test` | `cargo test --no-default-features` | Runtime |
-| `macos-latest` | `cargo test` | `cargo test --no-default-features` | Runtime |
+| `macos-latest` | `cargo test` | `cargo check --tests --no-default-features` | Bundled: Runtime; System: Build-check |
 | `windows-latest` | `cargo test` | `cargo test --no-default-features` | Runtime |
 | `ubuntu-24.04-arm` (`aarch64-unknown-linux-gnu`) | N/A | `cargo test --no-default-features` | Runtime |
 | `aarch64-apple-ios` | `cargo check` | `cargo check --no-default-features` | Build-check |
 | `aarch64-apple-ios-sim` | `cargo test` (simulator runner) | `cargo test --no-default-features` (simulator runner) | Runtime |
-| `aarch64-linux-android` | `cargo check` + `cargo test --no-run` | `cargo check --no-default-features` + `cargo test --no-run --no-default-features` | Link/no-run |
+| `aarch64-linux-android` | `cargo check` + `cargo test --no-run` | `cargo check --no-default-features` + `cargo check --tests --no-default-features` | Bundled: Link/no-run; System: Build-check |
 | `armv7-unknown-linux-gnueabihf` | N/A | `cargo check --no-default-features` | Build-check |
 | `aarch64-unknown-linux-musl` | N/A | `cargo check --no-default-features` | Build-check |
 | `x86_64-unknown-linux-musl` | N/A | `cargo check --no-default-features` | Build-check |
