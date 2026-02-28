@@ -1,5 +1,8 @@
 FROM ghcr.io/cross-rs/aarch64-unknown-linux-musl:edge
 
+# Note: this image installs common sqlite development packages, but current
+# CI still lacks a reliably linkable target `-lsqlite3` for system mode.
+# Keep as scaffolding for future musl system-ABI enablement.
 RUN if command -v apk >/dev/null 2>&1; then \
       apk add --no-cache \
         pkgconf \
