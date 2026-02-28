@@ -9,30 +9,32 @@ This crate provides a safe Rust wrapper around `SQLite`'s [`sqlite3_load_extensi
 
 ## Platform Support
 
-This crate is continuously validated in CI across desktop, mobile, and edge targets.
+This crate requires two `SQLite` ABI symbols when using system linkage:
 
-CI now validates both linkage modes:
+- `sqlite3_enable_load_extension`
+- `sqlite3_load_extension`
 
-- `bundled SQLite`: `sqlite-bundled` feature enabled.
-- `system SQLite`: `--no-default-features` (links to platform-provided `sqlite3`).
+CI validates those symbols as follows:
 
-| Target | Bundled `SQLite` lane | System `SQLite` lane | Guarantee level |
+- `Available`: system-linked lane links and/or runs successfully.
+- `Unavailable`: CI environment is missing symbols or missing linkable `libsqlite3`.
+- `Not yet validated`: CI currently compiles only; no system ABI link/runtime proof yet.
+
+| Target | System ABI status in CI | Recommended mode | Current CI coverage |
 | --- | --- | --- | --- |
-| `ubuntu-latest` | `cargo test` | `cargo test --no-default-features` | Runtime |
-| `macos-latest` | `cargo test` | `cargo check --tests --no-default-features` | Bundled: Runtime; System: Build-check |
-| `windows-latest` | `cargo test` | `cargo test --no-default-features` | Runtime |
-| `ubuntu-24.04-arm` (`aarch64-unknown-linux-gnu`) | N/A | `cargo test --no-default-features` | Runtime |
-| `aarch64-apple-ios` | `cargo check` | `cargo check --no-default-features` | Build-check |
-| `aarch64-apple-ios-sim` | `cargo test` (simulator runner) | `cargo check --tests --no-default-features` | Bundled: Runtime; System: Build-check |
-| `aarch64-linux-android` | `cargo check` + `cargo test --no-run` | `cargo check --no-default-features` + `cargo check --tests --no-default-features` | Bundled: Link/no-run; System: Build-check |
-| `armv7-unknown-linux-gnueabihf` | N/A | `cargo check --no-default-features` | Build-check |
-| `aarch64-unknown-linux-musl` | N/A | `cargo check --no-default-features` | Build-check |
-| `x86_64-unknown-linux-musl` | N/A | `cargo check --no-default-features` | Build-check |
-| `aarch64-pc-windows-msvc` | N/A | `cargo test --no-run --target aarch64-pc-windows-msvc --no-default-features` | Link/no-run |
+| `ubuntu-latest` | Available | Bundled or system | Bundled runtime (`cargo test`) + system runtime (`cargo test --no-default-features`) |
+| `macos-latest` | Unavailable (runner `libsqlite3` misses required symbols) | Bundled for runtime | Bundled runtime + system build-check (`cargo check --tests --no-default-features`) |
+| `windows-latest` | Available (via `vcpkg` `sqlite3`) | Bundled or system | Bundled runtime + system runtime |
+| `ubuntu-24.04-arm` (`aarch64-unknown-linux-gnu`) | Available | System supported in CI | System runtime (`cargo test --no-default-features`) |
+| `aarch64-apple-ios` | Not yet validated | Bundled preferred | Bundled/system build-check (`cargo check`) |
+| `aarch64-apple-ios-sim` | Unavailable in CI (system symbols missing) | Bundled for runtime | Bundled runtime + system build-check (`cargo check --tests --no-default-features`) |
+| `aarch64-linux-android` | Unavailable in CI (NDK lane has no linkable `-lsqlite3`) | Bundled for link checks | Bundled link/no-run (`cargo test --no-run`) + system build-check (`cargo check --tests --no-default-features`) |
+| `armv7-unknown-linux-gnueabihf` | Not yet validated | Undecided | System build-check only |
+| `aarch64-unknown-linux-musl` | Not yet validated | Undecided | System build-check only |
+| `x86_64-unknown-linux-musl` | Not yet validated | Undecided | System build-check only |
+| `aarch64-pc-windows-msvc` | Available (via `vcpkg` `sqlite3`) | System supported in CI | System link/no-run (`cargo test --no-run --target ... --no-default-features`) |
 
-`Runtime` gives end-to-end ABI confidence (including dynamic load behavior in tests).
-`Link/no-run` validates cross-target symbol/link compatibility but does not execute on target.
-`Build-check` validates compilation and target configuration only.
+Any target not listed in this table is not included in CI yet.
 
 ## Usage
 
