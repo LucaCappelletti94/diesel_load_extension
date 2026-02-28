@@ -395,7 +395,7 @@ jobs:
             --lcov \
             --output-path lcov.info
       - name: Upload coverage
-        if: ${{ secrets.CODECOV_TOKEN != '' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false) }}
+        if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false }}
         uses: codecov/codecov-action@b9fd7d16f6d7d1b5d2bec1a2887e65ceed900238
         with:
           files: lcov.info
