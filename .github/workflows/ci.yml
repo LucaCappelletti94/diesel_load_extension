@@ -323,6 +323,7 @@ jobs:
       matrix:
         target:
           - aarch64-unknown-linux-musl
+          - x86_64-unknown-linux-musl
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
       - uses: dtolnay/rust-toolchain@631a55b12751854ce901bb631d5902ceb48146f7
@@ -350,24 +351,6 @@ jobs:
         run: |
           cross test \
             --target armv7-unknown-linux-gnueabihf \
-            --no-run \
-            --no-default-features \
-            --locked
-
-  x86_64-musl-system-sqlite-link-check:
-    name: x86_64 MUSL System SQLite Link Check
-    runs-on: ubuntu-latest
-    timeout-minutes: 40
-    steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
-      - uses: dtolnay/rust-toolchain@631a55b12751854ce901bb631d5902ceb48146f7
-      - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5
-      - name: Install cross
-        run: RUSTFLAGS= cargo install cross --locked --version 0.2.5
-      - name: Link check against system SQLite
-        run: |
-          cross test \
-            --target x86_64-unknown-linux-musl \
             --no-run \
             --no-default-features \
             --locked
