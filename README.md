@@ -3,38 +3,7 @@
 [![CI](https://github.com/LucaCappelletti94/diesel_load_extension/actions/workflows/ci.yml/badge.svg)](https://github.com/LucaCappelletti94/diesel_load_extension/actions/workflows/ci.yml)
 [![codecov](https://codecov.io/gh/LucaCappelletti94/diesel_load_extension/graph/badge.svg)](https://codecov.io/gh/LucaCappelletti94/diesel_load_extension)
 
-Diesel extension for `SQLite` [`load_extension`](https://www.sqlite.org/c3ref/load_extension.html) support.
-
-This crate provides a safe Rust wrapper around `SQLite`'s [`sqlite3_load_extension`](https://www.sqlite.org/c3ref/load_extension.html) for [Diesel](https://diesel.rs)'s `SqliteConnection`. Extension loading is automatically enabled before the load and disabled afterward, so it is never left enabled unintentionally.
-
-## Platform Support
-
-This crate requires two `SQLite` ABI symbols when using system linkage:
-
-- `sqlite3_enable_load_extension`
-- `sqlite3_load_extension`
-
-CI validates those symbols as follows:
-
-- `Available`: system-linked lane links and/or runs successfully.
-- `Unavailable`: CI environment is missing symbols or missing linkable `libsqlite3`.
-- `Not yet validated`: CI currently compiles only; no system ABI link/runtime proof yet.
-
-| Target | System ABI status in CI | Recommended mode | Current CI coverage |
-| --- | --- | --- | --- |
-| `ubuntu-latest` | Available | Bundled or system | Bundled runtime (`cargo test`) + system runtime (`cargo test --no-default-features`) |
-| `macos-latest` | Unavailable (runner `libsqlite3` misses required symbols) | Bundled for runtime | Bundled runtime + system build-check (`cargo check --tests --no-default-features`) |
-| `windows-latest` | Available (via `vcpkg` `sqlite3`) | Bundled or system | Bundled runtime + system runtime |
-| `ubuntu-24.04-arm` (`aarch64-unknown-linux-gnu`) | Available | System supported in CI | System runtime (`cargo test --no-default-features`) |
-| `aarch64-apple-ios` | Not yet validated | Bundled preferred | Bundled/system build-check (`cargo check`) |
-| `aarch64-apple-ios-sim` | Unavailable in CI (system symbols missing) | Bundled for runtime | Bundled runtime + system build-check (`cargo check --tests --no-default-features`) |
-| `aarch64-linux-android` | Unavailable in CI (NDK lane has no linkable `-lsqlite3`) | Bundled for link checks | Bundled link/no-run (`cargo test --no-run`) + system build-check (`cargo check --tests --no-default-features`) |
-| `armv7-unknown-linux-gnueabihf` | Available (cross-image link/no-run) | System supported in CI (link/no-run) | System link/no-run (`cross test --no-run --target armv7-unknown-linux-gnueabihf --no-default-features`) |
-| `aarch64-unknown-linux-musl` | Unavailable in CI (cross linker cannot find target `-lsqlite3`) | Bundled preferred | System build-check only |
-| `x86_64-unknown-linux-musl` | Unavailable in CI (cross linker cannot find target `-lsqlite3`) | Bundled preferred | System build-check only |
-| `aarch64-pc-windows-msvc` | Available (via `vcpkg` `sqlite3`) | System supported in CI | System link/no-run (`cargo test --no-run --target ... --no-default-features`) |
-
-Any target not listed in this table is not included in CI yet.
+[Diesel](https://diesel.rs) extension providing a safe Rust wrapper around `SQLite`'s [`sqlite3_load_extension`](https://www.sqlite.org/c3ref/load_extension.html) for `SqliteConnection`. Extension loading is automatically enabled before the load and disabled afterward, so it is never left enabled unintentionally.
 
 ## Usage
 
@@ -157,7 +126,7 @@ Call `load_extension` once per extension you need to load.
 
 - Use `load_extension` when you want explicit, connection-scoped loading from a shared-library path (`.so`, `.dylib`, `.dll`).
 - Use `sqlite3_auto_extension` when extension code is already in-process and should be registered for every new `SQLite` connection in the process.
-- This crate focuses on `load_extension`; `sqlite3_auto_extension` is a lower-level global-registration API in core `SQLite`.
+- This crate focuses on `load_extension` while `sqlite3_auto_extension` is a lower-level global-registration API in core `SQLite`.
 
 Practical rule of thumb:
 
@@ -177,6 +146,35 @@ Security note:
 ### `SQLite` build requirements
 
 This crate calls [`sqlite3_load_extension`](https://www.sqlite.org/c3ref/load_extension.html) and [`sqlite3_enable_load_extension`](https://www.sqlite.org/c3ref/enable_load_extension.html), which are **not part of every `SQLite` build**. `SQLite` builds compiled with [`SQLITE_OMIT_LOAD_EXTENSION`](https://www.sqlite.org/compile.html#omit_load_extension) omit these functions entirely, and linking against such a build will fail. With the default `sqlite-bundled` feature, this crate compiles `SQLite` from source with extension loading enabled. If you disable default features to use a system-provided `SQLite` library, ensure it was built without `SQLITE_OMIT_LOAD_EXTENSION`.
+
+## Platform Support
+
+This crate requires two `SQLite` ABI symbols when using system linkage:
+
+- `sqlite3_enable_load_extension`
+- `sqlite3_load_extension`
+
+CI validates those symbols as follows:
+
+- `Available`: system-linked lane links and/or runs successfully.
+- `Unavailable`: CI environment is missing symbols or missing linkable `libsqlite3`.
+- `Not yet validated`: CI currently compiles only, no system ABI link/runtime proof yet.
+
+| Target | System ABI status in CI | Recommended mode | Current CI coverage |
+| --- | --- | --- | --- |
+| `ubuntu-latest` | Available | Bundled or system | Bundled runtime (`cargo test`) + system runtime (`cargo test --no-default-features`) |
+| `macos-latest` | Unavailable (runner `libsqlite3` misses required symbols) | Bundled for runtime | Bundled runtime + system build-check (`cargo check --tests --no-default-features`) |
+| `windows-latest` | Available (via `vcpkg` `sqlite3`) | Bundled or system | Bundled runtime + system runtime |
+| `ubuntu-24.04-arm` (`aarch64-unknown-linux-gnu`) | Available | System supported in CI | System runtime (`cargo test --no-default-features`) |
+| `aarch64-apple-ios` | Not yet validated | Bundled preferred | Bundled/system build-check (`cargo check`) |
+| `aarch64-apple-ios-sim` | Unavailable in CI (system symbols missing) | Bundled for runtime | Bundled runtime + system build-check (`cargo check --tests --no-default-features`) |
+| `aarch64-linux-android` | Unavailable in CI (NDK lane has no linkable `-lsqlite3`) | Bundled for link checks | Bundled link/no-run (`cargo test --no-run`) + system build-check (`cargo check --tests --no-default-features`) |
+| `armv7-unknown-linux-gnueabihf` | Available (cross-image link/no-run) | System supported in CI (link/no-run) | System link/no-run (`cross test --no-run --target armv7-unknown-linux-gnueabihf --no-default-features`) |
+| `aarch64-unknown-linux-musl` | Unavailable in CI (cross linker cannot find target `-lsqlite3`) | Bundled preferred | System build-check only |
+| `x86_64-unknown-linux-musl` | Unavailable in CI (cross linker cannot find target `-lsqlite3`) | Bundled preferred | System build-check only |
+| `aarch64-pc-windows-msvc` | Available (via `vcpkg` `sqlite3`) | System supported in CI | System link/no-run (`cargo test --no-run --target ... --no-default-features`) |
+
+Any target not listed in this table is not included in CI yet.
 
 ## License
 
