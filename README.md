@@ -7,22 +7,32 @@ Diesel extension for `SQLite` [`load_extension`](https://www.sqlite.org/c3ref/lo
 
 This crate provides a safe Rust wrapper around `SQLite`'s [`sqlite3_load_extension`](https://www.sqlite.org/c3ref/load_extension.html) for [Diesel](https://diesel.rs)'s `SqliteConnection`. Extension loading is automatically enabled before the load and disabled afterward, so it is never left enabled unintentionally.
 
-Note: not all `SQLite` builds include the load-extension ABI. Builds compiled with `SQLITE_OMIT_LOAD_EXTENSION` omit these symbols entirely, and linking will fail if they are missing.
-
-This crate is native-only. On `wasm32-unknown-unknown`, use [`sqlite-wasm-rs`](https://crates.io/crates/sqlite-wasm-rs) directly with `sqlite3_auto_extension` for precompiled extensions.
-
-This crate depends on Diesel's `with_raw_connection` API to access the raw `SQLite` connection handle (`*mut sqlite3`) in a scoped and safe way. `with_raw_connection` is available on Diesel's `main` branch and may not yet be available in the latest crates.io release.
-
-Because of that dependency, this crate is currently configured as `publish = false`.
-
 ## Platform Support
 
-This crate is continuously validated in CI across desktop and mobile targets.
+This crate is continuously validated in CI across desktop, mobile, and edge targets.
 
-- iOS: CI runs `cargo test` on `aarch64-apple-ios-sim` in an iOS simulator, and also runs a build check for `aarch64-apple-ios`.
-- Android: CI runs `cross test` for `aarch64-linux-android`, and also runs a build check for `aarch64-linux-android`.
+CI now validates both linkage modes:
 
-So yes: this crate is tested in CI and verified to work on both iOS and Android targets.
+- `bundled SQLite`: `sqlite-bundled` feature enabled.
+- `system SQLite`: `--no-default-features` (links to platform-provided `sqlite3`).
+
+| Target | Bundled `SQLite` lane | System `SQLite` lane | Guarantee level |
+| --- | --- | --- | --- |
+| `ubuntu-latest` | `cargo test` | `cargo test --no-default-features` | Runtime |
+| `macos-latest` | `cargo test` | `cargo test --no-default-features` | Runtime |
+| `windows-latest` | `cargo test` | `cargo test --no-default-features` | Runtime |
+| `ubuntu-24.04-arm` (`aarch64-unknown-linux-gnu`) | N/A | `cargo test --no-default-features` | Runtime |
+| `aarch64-apple-ios` | `cargo check` | `cargo check --no-default-features` | Build-check |
+| `aarch64-apple-ios-sim` | `cargo test` (simulator runner) | `cargo test --no-default-features` (simulator runner) | Runtime |
+| `aarch64-linux-android` | `cargo check` + `cargo test --no-run` | `cargo check --no-default-features` + `cargo test --no-run --no-default-features` | Link/no-run |
+| `armv7-unknown-linux-gnueabihf` | N/A | `cargo check --no-default-features` | Build-check |
+| `aarch64-unknown-linux-musl` | N/A | `cargo check --no-default-features` | Build-check |
+| `x86_64-unknown-linux-musl` | N/A | `cargo check --no-default-features` | Build-check |
+| `aarch64-pc-windows-msvc` | N/A | `cargo test --no-run --target aarch64-pc-windows-msvc --no-default-features` | Link/no-run |
+
+`Runtime` gives end-to-end ABI confidence (including dynamic load behavior in tests).
+`Link/no-run` validates cross-target symbol/link compatibility but does not execute on target.
+`Build-check` validates compilation and target configuration only.
 
 ## Usage
 
@@ -52,48 +62,86 @@ Then use the extension trait:
 ```rust
 use diesel::prelude::*;
 use diesel::SqliteConnection;
-use diesel_load_extension::{LoadExtensionError, SqliteLoadExtensionExt};
+use diesel_load_extension::{SqliteLoadExtensionExt, LoadExtensionError};
+# use std::path::Path;
+# use std::process::Command;
+# use std::time::{SystemTime, UNIX_EPOCH};
+# fn extension_binary_name(stem: &str) -> String {
+#     #[cfg(target_os = "macos")]
+#     {
+#         format!("lib{stem}.dylib")
+#     }
+#     #[cfg(target_os = "windows")]
+#     {
+#         format!("{stem}.dll")
+#     }
+#     #[cfg(all(not(target_os = "macos"), not(target_os = "windows")))]
+#     {
+#         format!("lib{stem}.so")
+#     }
+# }
+# fn build_smoke_extension(stem: &str) -> String {
+#     let source = Path::new(env!("CARGO_MANIFEST_DIR"))
+#         .join("tests")
+#         .join("fixtures")
+#         .join("smoke_extension.c");
+#     assert!(source.exists(), "Missing fixture source: {source:?}");
+#     let stamp = SystemTime::now()
+#         .duration_since(UNIX_EPOCH)
+#         .expect("System clock should be after UNIX epoch")
+#         .as_nanos();
+#     let build_dir = std::env::temp_dir()
+#         .join(format!("diesel_load_extension_readme_{stem}_{stamp}"));
+#     std::fs::create_dir_all(&build_dir).expect("Failed to create build dir");
+#     let extension = build_dir.join(extension_binary_name(stem));
+#     let mut cc = Command::new("cc");
+#     #[cfg(target_os = "macos")]
+#     {
+#         cc.arg("-dynamiclib");
+#     }
+#     #[cfg(target_os = "windows")]
+#     {
+#         cc.arg("-shared");
+#     }
+#     #[cfg(all(not(target_os = "macos"), not(target_os = "windows")))]
+#     {
+#         cc.args(["-shared", "-fPIC"]);
+#     }
+#     let status = cc
+#         .arg(&source)
+#         .arg("-o")
+#         .arg(&extension)
+#         .status()
+#         .expect("Failed to run C compiler");
+#     assert!(status.success(), "Failed to compile fixture extension");
+#     extension
+#         .to_str()
+#         .expect("Temporary extension path must be valid UTF-8")
+#         .to_owned()
+# }
+# let extension_path = build_smoke_extension("readme_smoke");
+let mut conn = SqliteConnection::establish(":memory:").unwrap();
 
-fn main() {
-    let mut conn = SqliteConnection::establish(":memory:").unwrap();
+// Working case with SQLite default entry point lookup (`sqlite3_extension_init`).
+conn.load_extension(&extension_path, None).unwrap();
 
-    // Load an extension (e.g., SpatiaLite)
-    // Extension loading is automatically enabled and disabled around the call.
-    let result = conn.load_extension("mod_spatialite", None);
-    assert!(matches!(result, Err(LoadExtensionError::LoadFailed { .. })));
-}
+// Working case with explicit entry point.
+conn.load_extension(&extension_path, Some("sqlite3_smokeext_init"))
+    .unwrap();
+
+// Failure case: missing library path.
+let result = conn.load_extension("/nonexistent/extension.so", None);
+assert!(matches!(result, Err(LoadExtensionError::LoadFailed { .. })));
 ```
 
 Call `load_extension` once per extension you need to load.
 
-### Custom Entry Points
+### When to use `load_extension` vs `sqlite3_auto_extension`
 
-If your extension uses a non-default entry point function, you can specify it:
-
-```rust
-use diesel::prelude::*;
-use diesel::SqliteConnection;
-use diesel_load_extension::{LoadExtensionError, SqliteLoadExtensionExt};
-
-let mut conn = SqliteConnection::establish(":memory:").unwrap();
-let result = conn.load_extension("my_extension", Some("my_extension_init"));
-assert!(matches!(result, Err(LoadExtensionError::LoadFailed { .. })));
-```
-
-### Error Handling
-
-The crate provides a [`LoadExtensionError`] type that surfaces `SQLite` error messages:
-
-```rust
-use diesel::prelude::*;
-use diesel::SqliteConnection;
-use diesel_load_extension::{SqliteLoadExtensionExt, LoadExtensionError};
-
-let mut conn = SqliteConnection::establish(":memory:").unwrap();
-
-let err = conn.load_extension("nonexistent_extension", None).unwrap_err();
-assert!(matches!(err, LoadExtensionError::LoadFailed { .. }));
-```
+- Use `load_extension` when you want to load an extension library by path for a specific connection, at a specific point in your app's lifecycle.
+- Use `sqlite3_auto_extension` when the extension is already linked into your process and you want it auto-registered for every new `SQLite` connection.
+- Prefer `load_extension` for explicit, connection-scoped loading in application code.
+- Prefer `sqlite3_auto_extension` for embedded/builtin extensions and framework-level global initialization.
 
 ### `SQLite` build requirements
 
