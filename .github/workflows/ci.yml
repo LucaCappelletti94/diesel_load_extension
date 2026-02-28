@@ -108,6 +108,11 @@ jobs:
       - name: Install system SQLite deps (Linux)
         if: runner.os == 'Linux'
         run: |
+          # GitHub Ubuntu images can ship an Azure CLI apt source that
+          # intermittently returns 403 and breaks apt-get update.
+          if [ -f /etc/apt/sources.list.d/azure-cli.list ]; then
+            sudo rm -f /etc/apt/sources.list.d/azure-cli.list
+          fi
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends libsqlite3-dev pkg-config
       - name: Setup vcpkg SQLite (Windows)
@@ -138,6 +143,11 @@ jobs:
       - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5
       - name: Install system SQLite deps
         run: |
+          # GitHub Ubuntu images can ship an Azure CLI apt source that
+          # intermittently returns 403 and breaks apt-get update.
+          if [ -f /etc/apt/sources.list.d/azure-cli.list ]; then
+            sudo rm -f /etc/apt/sources.list.d/azure-cli.list
+          fi
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends libsqlite3-dev pkg-config
       - name: Verify host architecture
