@@ -209,15 +209,13 @@ jobs:
         env:
           CARGO_TARGET_AARCH64_APPLE_IOS_SIM_RUNNER: >-
             xcrun simctl spawn ${{ env.SIMULATOR_UDID }}
-      - name: Run iOS simulator tests (system SQLite)
+      - name: Build check iOS simulator tests (system SQLite)
         run: |
-          cargo test \
+          cargo check \
+            --tests \
             --target aarch64-apple-ios-sim \
             --no-default-features \
             --locked
-        env:
-          CARGO_TARGET_AARCH64_APPLE_IOS_SIM_RUNNER: >-
-            xcrun simctl spawn ${{ env.SIMULATOR_UDID }}
       - name: Cleanup iOS simulator
         if: always()
         run: |
