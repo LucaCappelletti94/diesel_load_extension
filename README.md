@@ -31,7 +31,7 @@ CI validates those symbols as follows:
 | `aarch64-linux-android` | Unavailable in CI (NDK lane has no linkable `-lsqlite3`) | Bundled for link checks | Bundled link/no-run (`cargo test --no-run`) + system build-check (`cargo check --tests --no-default-features`) |
 | `armv7-unknown-linux-gnueabihf` | Available (cross-image link/no-run) | System supported in CI (link/no-run) | System link/no-run (`cross test --no-run --target armv7-unknown-linux-gnueabihf --no-default-features`) |
 | `aarch64-unknown-linux-musl` | Unavailable in CI (cross linker cannot find target `-lsqlite3`) | Bundled preferred | System build-check only |
-| `x86_64-unknown-linux-musl` | Not yet validated | Undecided | System build-check only |
+| `x86_64-unknown-linux-musl` | Available (cross-image link/no-run) | System supported in CI (link/no-run) | System link/no-run (`cross test --no-run --target x86_64-unknown-linux-musl --no-default-features`) |
 | `aarch64-pc-windows-msvc` | Available (via `vcpkg` `sqlite3`) | System supported in CI | System link/no-run (`cargo test --no-run --target ... --no-default-features`) |
 
 Any target not listed in this table is not included in CI yet.
