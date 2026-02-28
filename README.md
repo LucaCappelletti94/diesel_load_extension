@@ -155,10 +155,24 @@ Call `load_extension` once per extension you need to load.
 
 ### When to use `load_extension` vs `sqlite3_auto_extension`
 
-- Use `load_extension` when you want to load an extension library by path for a specific connection, at a specific point in your app's lifecycle.
-- Use `sqlite3_auto_extension` when the extension is already linked into your process and you want it auto-registered for every new `SQLite` connection.
-- Prefer `load_extension` for explicit, connection-scoped loading in application code.
-- Prefer `sqlite3_auto_extension` for embedded/builtin extensions and framework-level global initialization.
+- Use `load_extension` when you want explicit, connection-scoped loading from a shared-library path (`.so`, `.dylib`, `.dll`).
+- Use `sqlite3_auto_extension` when extension code is already in-process and should be registered for every new `SQLite` connection in the process.
+- This crate focuses on `load_extension`; `sqlite3_auto_extension` is a lower-level global-registration API in core `SQLite`.
+
+Practical rule of thumb:
+
+- Choose `load_extension` for optional/user-selected plugins and explicit app lifecycle control.
+- Choose `sqlite3_auto_extension` for builtin/framework-level behavior that should always be on for newly opened connections.
+
+Persistent extension pattern:
+
+- An extension loaded via `sqlite3_load_extension` can return `SQLITE_OK_LOAD_PERMANENTLY` and register an entry point with `sqlite3_auto_extension`, making itself available for subsequent connections.
+- `sqlite3_cancel_auto_extension` and `sqlite3_reset_auto_extension` are the APIs to undo global auto-registration.
+
+Security note:
+
+- In raw `SQLite` integrations, prefer `sqlite3_db_config(..., SQLITE_DBCONFIG_ENABLE_LOAD_EXTENSION, ...)` over `sqlite3_enable_load_extension` to avoid exposing SQL-level `load_extension()` calls.
+- This crate keeps the enabled window narrow by enabling loading only around the single extension load, then disabling it again.
 
 ### `SQLite` build requirements
 
