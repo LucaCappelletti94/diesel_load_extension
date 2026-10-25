@@ -162,7 +162,7 @@ CI validates those symbols as follows:
 
 | Target | System ABI status in CI | Recommended mode | Current CI coverage |
 | --- | --- | --- | --- |
-| `ubuntu-latest` | Available | Bundled or system | Bundled runtime (`cargo test`) + system runtime (`cargo test --no-default-features`) |
+| `ubuntu-26.04` | Available | Bundled or system | Bundled runtime (`cargo test`) + system runtime (`cargo test --no-default-features`) |
 | `macos-latest` | Unavailable (runner `libsqlite3` misses required symbols) | Bundled for runtime | Bundled runtime + system build-check (`cargo check --tests --no-default-features`) |
 | `windows-latest` | Available (via `vcpkg` `sqlite3`) | Bundled or system | Bundled runtime + system runtime |
 | `ubuntu-24.04-arm` (`aarch64-unknown-linux-gnu`) | Available | System supported in CI | System runtime (`cargo test --no-default-features`) |
